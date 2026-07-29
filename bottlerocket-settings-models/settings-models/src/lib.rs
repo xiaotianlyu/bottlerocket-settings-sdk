@@ -44,7 +44,7 @@ pub use settings_extension_measurement::{self, MeasurementSettingsV1};
 pub use settings_extension_metrics::{self, MetricsSettingsV1};
 pub use settings_extension_motd::{self, MotdV1};
 pub use settings_extension_network::{self, NetworkSettingsV1};
-pub use settings_extension_ntp::{self, NtpSettingsV1};
+pub use settings_extension_ntp::{self, NtpSettingsV1, NtpSettingsV2};
 pub use settings_extension_nvidia_container_runtime::{self, NvidiaContainerRuntimeSettingsV1};
 pub use settings_extension_oci_defaults::{self, OciDefaultsV1};
 pub use settings_extension_oci_hooks::{self, OciHooksSettingsV1};
