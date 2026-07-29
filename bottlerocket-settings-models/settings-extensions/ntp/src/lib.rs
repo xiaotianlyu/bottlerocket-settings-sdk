@@ -84,6 +84,10 @@ pub struct NtpTimeServer {
 #[model(impl_default = true)]
 pub struct NtpSettingsV2 {
     time_servers: HashMap<Identifier, NtpTimeServer>,
+    /// chrony log categories, rendered as a single `log` line
+    /// (e.g. `["measurements","statistics"]` -> `log measurements statistics`).
+    /// Empty/unset renders no `log` line.
+    logging: Vec<String>,
 }
 
 impl SettingsModel for NtpSettingsV2 {
@@ -182,6 +186,7 @@ mod test {
             NtpSettingsV2::generate(None, None),
             Ok(GenerateResult::Complete(NtpSettingsV2 {
                 time_servers: None,
+                logging: None,
             }))
         )
     }
@@ -211,6 +216,26 @@ mod test {
                 "minpoll 4".to_string(),
                 "maxpoll 4".to_string(),
             ])
+        );
+
+        let results = serde_json::to_string(&ntp).unwrap();
+        assert_eq!(results, test_json);
+    }
+
+    #[test]
+    fn test_serde_ntp_v2_logging() {
+        // logging is a top-level list of chrony log categories, parsed
+        // independently of the per-server map.
+        let test_json = r#"{"logging":["measurements","statistics","tracking"]}"#;
+
+        let ntp: NtpSettingsV2 = serde_json::from_str(test_json).unwrap();
+        assert_eq!(
+            ntp.logging.clone().unwrap(),
+            vec![
+                "measurements".to_string(),
+                "statistics".to_string(),
+                "tracking".to_string(),
+            ]
         );
 
         let results = serde_json::to_string(&ntp).unwrap();
