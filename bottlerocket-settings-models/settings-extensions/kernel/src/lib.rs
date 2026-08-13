@@ -50,6 +50,41 @@ impl SettingsModel for KernelSettingsV1 {
     }
 }
 
+/// UKIKernelSettingsV1 is a restricted kernel settings model that only exposes
+/// the `lockdown` setting. The variants using it won't allow the user to configure
+/// sysctl, hugepages and modules settings.
+#[model(impl_default = true)]
+struct UKIKernelSettingsV1 {
+    lockdown: Lockdown,
+}
+
+impl SettingsModel for UKIKernelSettingsV1 {
+    type PartialKind = Self;
+    type ErrorKind = Infallible;
+
+    fn get_version() -> &'static str {
+        "v1"
+    }
+
+    fn set(_current_value: Option<Self>, _target: Self) -> Result<()> {
+        // allow anything that parses as UKIKernelSettingsV1
+        Ok(())
+    }
+
+    fn generate(
+        existing_partial: Option<Self::PartialKind>,
+        _dependent_settings: Option<serde_json::Value>,
+    ) -> Result<GenerateResult<Self::PartialKind, Self>> {
+        Ok(GenerateResult::Complete(
+            existing_partial.unwrap_or_default(),
+        ))
+    }
+
+    fn validate(_value: Self, _validated_settings: Option<serde_json::Value>) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -163,5 +198,40 @@ mod test {
             hugepages_out["transparent"]["defrag"],
             serde_json::json!("defer+madvise")
         );
+    }
+
+    #[test]
+    fn test_generate_uki_kernel() {
+        let generated = UKIKernelSettingsV1::generate(None, None).unwrap();
+
+        assert_eq!(
+            generated,
+            GenerateResult::Complete(UKIKernelSettingsV1 { lockdown: None })
+        )
+    }
+
+    #[test]
+    fn test_serde_uki_kernel() {
+        let test_json = r#"{"lockdown": "integrity"}"#;
+        let kernel: UKIKernelSettingsV1 = serde_json::from_str(test_json).unwrap();
+
+        assert_eq!(
+            kernel,
+            UKIKernelSettingsV1 {
+                lockdown: Some(Lockdown::try_from("integrity").unwrap()),
+            }
+        );
+    }
+
+    #[test]
+    fn test_uki_kernel_rejects_removed_fields() {
+        // UKIKernelSettingsV1 intentionally only exposes `lockdown`; attempting to set
+        // `modules` or `sysctl` must fail to deserialize.
+        let with_sysctl = r#"{"lockdown": "integrity", "sysctl": {"key": "value"}}"#;
+        assert!(serde_json::from_str::<UKIKernelSettingsV1>(with_sysctl).is_err());
+
+        let with_modules =
+            r#"{"lockdown": "integrity", "modules": {"foo": {"allowed": true, "autoload": true}}}"#;
+        assert!(serde_json::from_str::<UKIKernelSettingsV1>(with_modules).is_err());
     }
 }
