@@ -133,6 +133,28 @@ impl LinearlyMigrateable for NtpSettingsV2 {
     }
 }
 
+/// PROTOTYPE for the "array or hashmap" shape (shape B). Kept alongside V1/V2 so
+/// it can be evaluated without deleting anything; the real rework picks one shape.
+///
+/// The idea (Arnaldo's suggestion): stay on v1 with NO migration, but let
+/// `time-servers` be EITHER the old plain URL list, OR a named map of per-server
+/// objects. `#[serde(untagged)]` discriminates the two on the way in, and each
+/// variant reuses types that already exist:
+///   - `Legacy` is the original NtpSettingsV1 list of `Url`s (backwards compatible).
+///   - `Named` is the NtpSettingsV2 `HashMap<Identifier, NtpTimeServer>`.
+/// This mirrors the in-repo `KubernetesClusterDnsIp` pattern (single value or a
+/// list). The datastore round-trip for this shape is verified separately in the
+/// datastore crate; these tests cover the serde layer on the real Url/Identifier
+/// types.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum NtpTimeServers {
+    /// Old format: a plain list of URLs. Matches what NtpSettingsV1 accepts today.
+    Legacy(Vec<Url>),
+    /// New format: named per-server config, same map type as NtpSettingsV2.
+    Named(HashMap<Identifier, NtpTimeServer>),
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -240,5 +262,66 @@ mod test {
 
         let results = serde_json::to_string(&ntp).unwrap();
         assert_eq!(results, test_json);
+    }
+
+    // Shape B prototype: the untagged enum must pick the right variant from JSON,
+    // on the real Url/Identifier types (the datastore crate covers the flat-store
+    // round-trip separately, with String stand-ins).
+
+    #[test]
+    fn test_untagged_parses_legacy_list() {
+        // A plain URL list must parse as the Legacy variant (backwards compatible).
+        let test_json = r#"["https://time.aws.com","https://time2.aws.com"]"#;
+        let parsed: NtpTimeServers = serde_json::from_str(test_json).unwrap();
+        assert_eq!(
+            parsed,
+            NtpTimeServers::Legacy(vec![
+                Url::try_from("https://time.aws.com").unwrap(),
+                Url::try_from("https://time2.aws.com").unwrap(),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_untagged_parses_named_map() {
+        // A named map must parse as the Named variant, carrying per-server config.
+        let test_json = r#"{"link-local":{"address":"169.254.169.123","directive":"server","options":["iburst","prefer","minpoll 4","maxpoll 4"]}}"#;
+        let parsed: NtpTimeServers = serde_json::from_str(test_json).unwrap();
+        match parsed {
+            NtpTimeServers::Named(map) => {
+                let server = map
+                    .get(&Identifier::try_from("link-local").unwrap())
+                    .unwrap();
+                assert_eq!(server.address, Some(Url::try_from("169.254.169.123").unwrap()));
+                assert_eq!(server.directive, Some(NtpDirective::Server));
+                assert_eq!(
+                    server.options,
+                    Some(vec![
+                        "iburst".to_string(),
+                        "prefer".to_string(),
+                        "minpoll 4".to_string(),
+                        "maxpoll 4".to_string(),
+                    ])
+                );
+            }
+            NtpTimeServers::Legacy(_) => {
+                panic!("a named map was misparsed as the Legacy list variant")
+            }
+        }
+    }
+
+    #[test]
+    fn test_untagged_no_cross_contamination() {
+        // The two formats must not bleed into each other: a list is never Named,
+        // and a map is never Legacy.
+        let list: NtpTimeServers =
+            serde_json::from_str(r#"["https://time.aws.com"]"#).unwrap();
+        assert!(matches!(list, NtpTimeServers::Legacy(_)));
+
+        let map: NtpTimeServers = serde_json::from_str(
+            r#"{"amazon-pool":{"address":"time.aws.com","directive":"pool","options":["iburst"]}}"#,
+        )
+        .unwrap();
+        assert!(matches!(map, NtpTimeServers::Named(_)));
     }
 }
