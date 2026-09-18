@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [unreleased changes here]: https://github.com/bottlerocket-os/bottlerocket-settings-sdk/compare/bottlerocket-settings-models-v0.28.0...HEAD
 
+## [0.29.0] - 2026-09-17
+
+### Added
+
+- Added `drivers` setting to `settings.kernel` for selecting the NVIDIA driver branch ([#154])
+
+### Changed
+
+- Add tigher URL validation and reject control characters ([#150])
+
+[#150]: https://github.com/bottlerocket-os/bottlerocket-settings-sdk/pull/150
+[#154]: https://github.com/bottlerocket-os/bottlerocket-settings-sdk/pull/154
+
+[0.29.0]: https://github.com/bottlerocket-os/bottlerocket-settings-sdk/compare/bottlerocket-settings-models-v0.28.0...bottlerocket-settings-models-v0.29.0
+
 ## [0.28.0] - 2026-09-11
 
 ### Changed
